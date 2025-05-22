@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Node {{.port}} - Danh bạ</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; }
+        table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 6px; }
+        input, button { margin: 4px; padding: 6px; }
+    </style>
+</head>
+<body>
+    <h1>📇 Node {{.port}} - Sổ liên hệ</h1>
+
+    <form method="POST" action="/add">
+        <input name="name" placeholder="Tên" required>
+        <input name="phone" placeholder="SĐT" required>
+        <button>Thêm</button>
+    </form>
+
+    <table>
+        <thead>
+            <tr><th>Tên</th><th>SĐT</th><th>Xoá</th></tr>
+        </thead>
+        <tbody>
+        {{range .contacts}}
+            <tr>
+                <td>{{.Name}}</td>
+                <td>{{.Phone}}</td>
+                <td>
+                    <form method="POST" action="/delete">
+                        <input type="hidden" name="name" value="{{.Name}}">
+                        <button onclick="return confirm('Xoá {{.Name}}?')">X</button>
+                    </form>
+                </td>
+            </tr>
+        {{end}}
+        </tbody>
+    </table>
+</body>
+</html>
