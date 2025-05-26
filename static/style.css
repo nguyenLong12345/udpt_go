@@ -1,0 +1,95 @@
+body {
+    font-family: "Segoe UI", sans-serif;
+    max-width: 700px;
+    margin: auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    color: #333;
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+th, td {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+}
+
+thead {
+    background-color: #007acc;
+    color: #fff;
+}
+
+tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+input[type="text"], input[name="name"], input[name="phone"] {
+    padding: 8px;
+    margin: 4px 0;
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+form {
+    display: inline-block;
+    margin-right: 4px;
+}
+
+button {
+    padding: 8px 12px;
+    margin: 4px 0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+button:hover {
+    opacity: 0.9;
+}
+
+button[type="submit"], form[action="/add"] button {
+    background-color: #28a745;
+    color: white;
+}
+
+form[action="/delete"] button {
+    background-color: #dc3545;
+    color: white;
+}
+
+form[action="/edit"] button {
+    background-color: #ffc107;
+    color: black;
+}
+
+.action-cell {
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    table, thead, tbody, th, td, tr {
+        display: block;
+    }
+    th {
+        display: none;
+    }
+    td {
+        margin-bottom: 10px;
+        border: none;
+    }
+}
