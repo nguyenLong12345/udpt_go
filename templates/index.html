@@ -8,7 +8,6 @@
         table { width: 100%; margin-top: 20px; border-collapse: collapse; }
         th, td { border: 1px solid #ccc; padding: 6px; }
         input, button { margin: 4px; padding: 6px; }
-        form { display: inline; }
     </style>
 </head>
 <body>
@@ -22,7 +21,7 @@
 
     <table>
         <thead>
-            <tr><th>Tên</th><th>SĐT</th><th>Hành động</th></tr>
+            <tr><th>Tên</th><th>SĐT</th><th>Xoá</th></tr>
         </thead>
         <tbody>
         {{range .contacts}}
@@ -32,12 +31,7 @@
                 <td>
                     <form method="POST" action="/delete">
                         <input type="hidden" name="name" value="{{.Name}}">
-                        <button onclick="return confirm('Xoá {{.Name}}?')">Xoá</button>
-                    </form>
-                    <form method="POST" action="/edit">
-                        <input type="hidden" name="name" value="{{.Name}}">
-                        <input name="phone" placeholder="SĐT mới" required>
-                        <button>Sửa</button>
+                        <button onclick="return confirm('Xoá {{.Name}}?')">X</button>
                     </form>
                 </td>
             </tr>
