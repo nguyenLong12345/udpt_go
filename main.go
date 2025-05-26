@@ -15,6 +15,7 @@ import (
     "github.com/syndtr/goleveldb/leveldb"
 )
 
+
 type Contact struct {
     Name  string `json:"name"`
     Phone string `json:"phone"`
@@ -42,12 +43,15 @@ func main() {
     defer db.Close()
 
     r := gin.Default()
+
     r.LoadHTMLGlob("templates/*.html")
+    r.Static("/static", "./static")
 
     r.GET("/", showContacts)
     r.POST("/delete_remote", handleDeleteRemote)
     r.POST("/add", handleAdd)
     r.POST("/delete", handleDelete)
+    r.POST("/edit", handleEdit)
     r.POST("/replicate", handleReplication)
 
     // API đơn giản để ping kiểm tra node còn sống
@@ -168,6 +172,36 @@ func sendDeleteToNode(nodeURL string, name string) {
     defer resp.Body.Close()
     _, _ = io.ReadAll(resp.Body)
 }
+
+func handleEdit(c *gin.Context) {
+    name := c.PostForm("name")
+    phone := c.PostForm("phone")
+    contact := Contact{Name: name, Phone: phone}
+    primary := getPrimaryNode(name)
+
+    if primary != thisNode {
+        err := forwardFormToNode(primary, "/edit", contact)
+        if err != nil {
+            fmt.Println("⚠️ Không thể gửi sửa đến node chính, bỏ qua")
+        }
+        c.Redirect(http.StatusFound, "/")
+        return
+    }
+
+    // Đây là node chính → cập nhật local
+    if err := db.Put([]byte(name), []byte(phone), nil); err != nil {
+        c.String(500, "Lỗi khi sửa dữ liệu: %v", err)
+        return
+    }
+
+    // Cập nhật sang các node backup
+    for _, backup := range getBackupNodes(primary) {
+        forwardJSONToNode(backup, "/replicate", contact)
+    }
+
+    c.Redirect(http.StatusFound, "/")
+}
+
 
 func handleReplication(c *gin.Context) {
     var contact Contact
