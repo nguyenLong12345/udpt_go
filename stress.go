@@ -16,7 +16,7 @@ var targetURLs = []string{
 }
 
 const (
-    numClients    = 100
+    numClients    = 1000000
     maxConcurrent = 20
     timeoutLimit  = 3 // Nếu 1 node lỗi liên tiếp 3 lần → coi là down
 )
