@@ -15,10 +15,15 @@ import (
     "github.com/syndtr/goleveldb/leveldb"
 )
 
-
 type Contact struct {
     Name  string `json:"name"`
     Phone string `json:"phone"`
+}
+
+type EditRequest struct {
+    OriginalName string `json:"original_name"`
+    Name         string `json:"name"`
+    Phone        string `json:"phone"`
 }
 
 var (
@@ -53,6 +58,7 @@ func main() {
     r.POST("/delete", handleDelete)
     r.POST("/edit", handleEdit)
     r.POST("/replicate", handleReplication)
+    r.POST("/replicate_edit", handleEditReplication)
 
     // API đơn giản để ping kiểm tra node còn sống
     r.GET("/ping", func(c *gin.Context) {
@@ -174,34 +180,91 @@ func sendDeleteToNode(nodeURL string, name string) {
 }
 
 func handleEdit(c *gin.Context) {
-    name := c.PostForm("name")
+    originalName := c.PostForm("original_name")
+    newName := c.PostForm("name")
     phone := c.PostForm("phone")
-    contact := Contact{Name: name, Phone: phone}
-    primary := getPrimaryNode(name)
+    
+    editReq := EditRequest{
+        OriginalName: originalName,
+        Name:         newName,
+        Phone:        phone,
+    }
 
-    if primary != thisNode {
-        err := forwardFormToNode(primary, "/edit", contact)
-        if err != nil {
-            fmt.Println("⚠️ Không thể gửi sửa đến node chính, bỏ qua")
+    // Xác định primary node cho cả tên cũ và tên mới
+    originalPrimary := getPrimaryNode(originalName)
+    newPrimary := getPrimaryNode(newName)
+
+    // Trường hợp 1: Tên không đổi hoặc primary node giống nhau
+    if originalName == newName || originalPrimary == newPrimary {
+        if originalPrimary != thisNode {
+            err := forwardEditToNode(originalPrimary, editReq)
+            if err != nil {
+                fmt.Println("⚠️ Không thể gửi sửa đến node chính, bỏ qua")
+            }
+            c.Redirect(http.StatusFound, "/")
+            return
         }
-        c.Redirect(http.StatusFound, "/")
-        return
-    }
 
-    // Đây là node chính → cập nhật local
-    if err := db.Put([]byte(name), []byte(phone), nil); err != nil {
-        c.String(500, "Lỗi khi sửa dữ liệu: %v", err)
-        return
-    }
+        // Đây là primary node → xóa dữ liệu cũ trước, sau đó thêm dữ liệu mới
+        // Luôn xóa bản ghi cũ trước khi cập nhật (dù tên có thay đổi hay không)
+        if err := db.Delete([]byte(originalName), nil); err != nil {
+            fmt.Printf("⚠️ Không thể xóa bản ghi cũ '%s': %v\n", originalName, err)
+        }
+        
+        // Thêm bản ghi mới
+        if err := db.Put([]byte(newName), []byte(phone), nil); err != nil {
+            c.String(500, "Lỗi khi sửa dữ liệu: %v", err)
+            return
+        }
 
-    // Cập nhật sang các node backup
-    for _, backup := range getBackupNodes(primary) {
-        forwardJSONToNode(backup, "/replicate", contact)
+        // Replicate việc chỉnh sửa sang các backup node
+        for _, backup := range getBackupNodes(originalPrimary) {
+            forwardEditJSONToNode(backup, "/replicate_edit", editReq)
+        }
+    } else {
+        // Trường hợp 2: Tên thay đổi và primary node khác nhau
+        // Bước 1: Xóa khỏi primary node cũ và backup nodes của nó
+        if originalPrimary != thisNode {
+            // Gửi yêu cầu xóa đến primary node cũ
+            go sendDeleteToNode(originalPrimary, originalName)
+        } else {
+            // Xóa local nếu đây là primary node cũ
+            db.Delete([]byte(originalName), nil)
+        }
+        
+        // Xóa khỏi tất cả backup nodes của primary cũ
+        for _, backup := range getBackupNodes(originalPrimary) {
+            go sendDeleteToNode(backup, originalName)
+        }
+
+        // Bước 2: Thêm vào primary node mới
+        newContact := Contact{Name: newName, Phone: phone}
+        if newPrimary != thisNode {
+            err := forwardFormToNode(newPrimary, "/add", newContact)
+            if err != nil {
+                // Primary node mới không khả dụng, lưu tạm
+                fmt.Println("⚠️ Primary node mới không khả dụng, lưu tạm")
+                key := "pending_" + newName
+                if err := db.Put([]byte(key), []byte(phone), nil); err != nil {
+                    fmt.Println("❌ Lỗi lưu dữ liệu pending:", err)
+                }
+            }
+        } else {
+            // Đây là primary node mới → lưu local và replicate
+            if err := db.Put([]byte(newName), []byte(phone), nil); err != nil {
+                c.String(500, "Lỗi khi lưu dữ liệu mới: %v", err)
+                return
+            }
+            
+            // Replicate sang backup nodes của primary mới
+            for _, backup := range getBackupNodes(newPrimary) {
+                forwardJSONToNode(backup, "/replicate", newContact)
+            }
+        }
     }
 
     c.Redirect(http.StatusFound, "/")
 }
-
 
 func handleReplication(c *gin.Context) {
     var contact Contact
@@ -216,10 +279,44 @@ func handleReplication(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{"status": "replicated"})
 }
 
+func handleEditReplication(c *gin.Context) {
+    var editReq EditRequest
+    if err := c.BindJSON(&editReq); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
+        return
+    }
+
+    // Luôn xóa bản ghi cũ trước (dù tên có thay đổi hay không)
+    if err := db.Delete([]byte(editReq.OriginalName), nil); err != nil {
+        fmt.Printf("⚠️ Không thể xóa bản ghi cũ '%s' trong replication: %v\n", editReq.OriginalName, err)
+    }
+
+    // Thêm bản ghi mới
+    if err := db.Put([]byte(editReq.Name), []byte(editReq.Phone), nil); err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi cập nhật dữ liệu"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"status": "edit replicated"})
+}
+
 // ===== Forward utils =======
 func forwardFormToNode(nodeURL, path string, contact Contact) error {
     data := fmt.Sprintf("name=%s&phone=%s", contact.Name, contact.Phone)
-    resp, err := http.Post(nodeURL+path, "application/x-www-form-urlencoded", strings.NewReader(data))
+    client := &http.Client{Timeout: 3 * time.Second}
+    resp, err := client.Post(nodeURL+path, "application/x-www-form-urlencoded", strings.NewReader(data))
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+    _, _ = io.ReadAll(resp.Body)
+    return nil
+}
+
+func forwardEditToNode(nodeURL string, editReq EditRequest) error {
+    data := fmt.Sprintf("original_name=%s&name=%s&phone=%s", editReq.OriginalName, editReq.Name, editReq.Phone)
+    client := &http.Client{Timeout: 3 * time.Second}
+    resp, err := client.Post(nodeURL+"/edit", "application/x-www-form-urlencoded", strings.NewReader(data))
     if err != nil {
         return err
     }
@@ -230,10 +327,22 @@ func forwardFormToNode(nodeURL, path string, contact Contact) error {
 
 func forwardJSONToNode(nodeURL, path string, contact Contact) {
     jsonData, _ := json.Marshal(contact)
-    client := &http.Client{Timeout: 2 * time.Second}
+    client := &http.Client{Timeout: 3 * time.Second}
     resp, err := client.Post(nodeURL+path, "application/json", bytes.NewBuffer(jsonData))
     if err != nil {
         fmt.Printf("⚠️ Lỗi replicate đến %s: %v\n", nodeURL, err)
+        return
+    }
+    defer resp.Body.Close()
+    _, _ = io.ReadAll(resp.Body)
+}
+
+func forwardEditJSONToNode(nodeURL, path string, editReq EditRequest) {
+    jsonData, _ := json.Marshal(editReq)
+    client := &http.Client{Timeout: 3 * time.Second}
+    resp, err := client.Post(nodeURL+path, "application/json", bytes.NewBuffer(jsonData))
+    if err != nil {
+        fmt.Printf("⚠️ Lỗi replicate edit đến %s: %v\n", nodeURL, err)
         return
     }
     defer resp.Body.Close()

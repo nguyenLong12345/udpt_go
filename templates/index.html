@@ -8,35 +8,163 @@
 <body>
     <h1>📇 Node {{.port}} - Sổ liên hệ</h1>
 
-    <form method="POST" action="/add">
-        <input name="name" placeholder="Tên" required>
-        <input name="phone" placeholder="SĐT" required>
-        <button>Thêm</button>
-    </form>
+    <button class="add-button" onclick="openAddModal()">➕ Thêm liên hệ mới</button>
 
     <table>
         <thead>
-            <tr><th>Tên</th><th>SĐT</th><th>Hành động</th></tr>
+            <tr>
+                <th>Tên</th>
+                <th>Số điện thoại</th>
+                <th>Hành động</th>
+            </tr>
         </thead>
         <tbody>
         {{range .contacts}}
             <tr>
-                <td>{{.Name}}</td>
-                <td>{{.Phone}}</td>
-                <td>
-                    <form method="POST" action="/delete">
-                        <input type="hidden" name="name" value="{{.Name}}">
-                        <button onclick="return confirm('Xoá {{.Name}}?')">Xoá</button>
-                    </form>
-                    <form method="POST" action="/edit">
-                        <input type="hidden" name="name" value="{{.Name}}">
-                        <input name="phone" placeholder="SĐT mới" required>
-                        <button>Sửa</button>
-                    </form>
+                <td data-label="Tên">{{.Name}}</td>
+                <td data-label="Số điện thoại">{{.Phone}}</td>
+                <td data-label="Hành động">
+                    <div class="action-buttons">
+                        <button class="edit-btn" onclick="openEditModal('{{.Name}}', '{{.Phone}}')">✏️ Sửa</button>
+                        <button class="delete-btn" onclick="deleteContact('{{.Name}}')">🗑️ Xóa</button>
+                    </div>
                 </td>
             </tr>
         {{end}}
         </tbody>
     </table>
+
+    <!-- Add Modal -->
+    <div id="addModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>➕ Thêm liên hệ mới</h3>
+                <button class="close" onclick="closeModal('addModal')">&times;</button>
+            </div>
+            <form id="addForm" method="POST" action="/add">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="addName">Tên:</label>
+                        <input type="text" id="addName" name="name" required placeholder="Nhập tên liên hệ">
+                    </div>
+                    <div class="form-group">
+                        <label for="addPhone">Số điện thoại:</label>
+                        <input type="tel" id="addPhone" name="phone" required placeholder="Nhập số điện thoại">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeModal('addModal')">Hủy</button>
+                    <button type="submit" class="btn-submit">✅ Thêm</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>✏️ Chỉnh sửa liên hệ</h3>
+                <button class="close" onclick="closeModal('editModal')">&times;</button>
+            </div>
+            <form id="editForm" method="POST" action="/edit">
+                <div class="modal-body">
+                    <input type="hidden" id="editOriginalName" name="original_name">
+                    <div class="form-group">
+                        <label for="editName">Tên:</label>
+                        <input type="text" id="editName" name="name" required placeholder="Nhập tên liên hệ">
+                    </div>
+                    <div class="form-group">
+                        <label for="editPhone">Số điện thoại:</label>
+                        <input type="tel" id="editPhone" name="phone" required placeholder="Nhập số điện thoại">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeModal('editModal')">Hủy</button>
+                    <button type="submit" class="btn-submit">💾 Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Hidden form for delete -->
+    <form id="deleteForm" method="POST" action="/delete" style="display: none;">
+        <input type="hidden" id="deleteName" name="name">
+    </form>
+
+    <script>
+        function openAddModal() {
+            document.getElementById('addModal').style.display = 'block';
+            document.getElementById('addName').focus();
+        }
+
+        function openEditModal(name, phone) {
+            document.getElementById('editOriginalName').value = name;
+            document.getElementById('editName').value = name;
+            document.getElementById('editPhone').value = phone;
+            document.getElementById('editModal').style.display = 'block';
+            document.getElementById('editName').focus();
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+            // Reset forms
+            if (modalId === 'addModal') {
+                document.getElementById('addForm').reset();
+            } else if (modalId === 'editModal') {
+                document.getElementById('editForm').reset();
+            }
+        }
+
+        function deleteContact(name) {
+            if (confirm('Bạn có chắc chắn muốn xóa liên hệ "' + name + '"?')) {
+                document.getElementById('deleteName').value = name;
+                document.getElementById('deleteForm').submit();
+            }
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const addModal = document.getElementById('addModal');
+            const editModal = document.getElementById('editModal');
+            
+            if (event.target === addModal) {
+                closeModal('addModal');
+            } else if (event.target === editModal) {
+                closeModal('editModal');
+            }
+        }
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal('addModal');
+                closeModal('editModal');
+            }
+        });
+
+        // Handle form submissions
+        document.getElementById('addForm').addEventListener('submit', function(e) {
+            const name = document.getElementById('addName').value.trim();
+            const phone = document.getElementById('addPhone').value.trim();
+            
+            if (!name || !phone) {
+                e.preventDefault();
+                alert('Vui lòng điền đầy đủ thông tin!');
+                return;
+            }
+        });
+
+        document.getElementById('editForm').addEventListener('submit', function(e) {
+            const name = document.getElementById('editName').value.trim();
+            const phone = document.getElementById('editPhone').value.trim();
+            
+            if (!name || !phone) {
+                e.preventDefault();
+                alert('Vui lòng điền đầy đủ thông tin!');
+                return;
+            }
+        });
+    </script>
 </body>
 </html>
